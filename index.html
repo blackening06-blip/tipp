@@ -20,7 +20,8 @@ html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--chalk);color:var(--ink);font:400 15px/1.45 Barlow,system-ui,sans-serif}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--turf2)}
 header{background:var(--turf) repeating-linear-gradient(90deg,transparent 0 47px,rgba(255,255,255,.13) 47px 49px);color:#fff;padding:18px 16px 14px}
-h1{font:800 36px/1 "Barlow Condensed",sans-serif;margin:0}
+h1{font:800 36px/1 "Barlow Condensed",sans-serif;margin:0;display:flex;align-items:center;gap:10px}
+.ball{width:44px;height:44px;flex:none;filter:drop-shadow(0 2px 3px rgba(0,0,0,.3))}
 .sub{opacity:.85;margin-top:5px;font-size:13.5px}
 .upd{margin-top:10px;border:0;border-radius:8px;padding:8px 14px;background:#fff;color:var(--turf2);font:700 14px Barlow,sans-serif;cursor:pointer}
 .upd:disabled{opacity:.6}
@@ -81,7 +82,7 @@ details.set button{border:1px solid var(--line);background:var(--paper);color:va
 </head>
 <body>
 <header>
-  <h1>Tipp das</h1>
+  <h1><svg class="ball" viewBox="-50 -50 100 100" aria-hidden="true"><g transform="rotate(-35)"><path d="M-44 0Q0-52 44 0Q0 52-44 0Z" fill="#8b4a2b"/><g stroke="#fff" stroke-width="4" stroke-linecap="round"><path d="M-13 0H13M-10-5V5M-5-5V5M0-5V5M5-5V5M10-5V5"/><path d="M-27-14V14M27-14V14"/></g></g></svg>Tipp das</h1>
   <div class="sub" id="sub">Lade Daten …</div>
   <button id="upd" class="upd" hidden>Daten aktualisieren</button>
   <div class="sub" id="status" aria-live="polite"></div>
@@ -96,8 +97,8 @@ const EMBED = /*DATA*/null;
 const APP = !EMBED;   // als App: Daten laden, Button und Einstellungen zeigen
 let D = {week: "?", updated: "", slots: []};
 const pct = p => Math.round(p * 100) + " %";
-const de = x => String(x).replace(".", ",");
-const fair = p => de((1 / p).toFixed(2));
+const de = x => String(x).replace(/(\d)\.(\d)/g, "$1,$2");
+const fair = p => p > 0 ? de((1 / p).toFixed(2)) : "–";
 const TAX = 0.95; // bwin zieht 5 % Wettsteuer vom Gewinn ab
 const el = (tag, props = {}) => Object.assign(document.createElement(tag), props);
 const store = {get: k => { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
@@ -110,24 +111,56 @@ function suggest(i, n) {
   return out;
 }
 function add(l) {
-  const old = picks[cur].find(x => x.game === l.game);
-  picks[cur] = picks[cur].filter(x => x.game !== l.game).concat(l);
-  flash = {id: l.id, text: old ? `Getauscht: ${de(old.label)} → ${de(l.label)}` : `Neu: ${de(l.label)}`};
+  if (picks[cur].some(x => x.id === l.id)) return;
+  const same = picks[cur].find(x => x.game === l.game);
+  picks[cur] = picks[cur].concat(l);
+  flash = {id: l.id, text: same ? `Neu: ${de(l.label)}, gemeinsam gerechnet mit ${de(same.label)}` : `Neu: ${de(l.label)}`};
   render();
+}
+// Legs aus demselben Spiel hängen zusammen: Simulation von Spielausgang und Punkten
+function rng(s) { return () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const cache = {};
+function corr(legs) {
+  const key = legs.map(l => l.id).sort().join();
+  if (key in cache) return cache[key];
+  const g = legs[0].gm, r = rng(42), N = 20000, one = legs.map(() => 0);
+  const imp = {[g.h]: (g.t + g.m) / 2, [g.a]: (g.t - g.m) / 2};
+  let all = 0;
+  for (let i = 0; i < N; i++) {
+    const R = Math.sqrt(-2 * Math.log(r() + 1e-12)), a = 2 * Math.PI * r();
+    const m = g.m + 12.6 * R * Math.cos(a), t = g.t + 13 * R * Math.sin(a);
+    const sc = {[g.h]: (t + m) / 2, [g.a]: (t - m) / 2};
+    let ok = true;
+    legs.forEach((l, j) => {
+      const d = l.d, opp = d.tm === g.h ? g.a : g.h;
+      const hit = d.k === "win" ? sc[d.tm] > sc[opp] : d.k === "hc" ? sc[d.tm] + d.ln > sc[opp]
+        : d.k === "ou" ? t > d.ln : d.k === "tt" ? sc[d.tm] > d.ln
+        : r() < 1 - Math.exp(-d.lam * Math.max(sc[d.tm], 0) / imp[d.tm]);
+      if (hit) one[j]++; else ok = false;
+    });
+    if (ok) all++;
+  }
+  const base = one.reduce((x, c) => x * c / N, 1);
+  return cache[key] = base > 0 ? (all / N) / base : 0;
+}
+function prob(list) {
+  const games = {};
+  list.forEach(l => (games[l.game] = games[l.game] || []).push(l));
+  return Object.values(games).reduce((p, g) => p * g.reduce((x, l) => x * l.p, 1) * (g.length > 1 ? corr(g) : 1), 1);
 }
 function remove(l) { picks[cur] = picks[cur].filter(x => x.id !== l.id); flash = null; render(); }
 function row(l) {
-  const rep = picks[cur].find(x => x.game === l.game);
-  const b = el("button", {className: "leg" + (l.warn ? " warn" : "") + (rep ? " swap" : "")});
-  b.innerHTML = `<span><strong>${de(l.label)}</strong><small>${l.match}${rep ? ` · <span class="rep">ersetzt ${de(rep.label)}, gleiches Spiel</span>` : ""}${l.warn ? " · " + l.warn : ""}</small></span><span><span class="p">${pct(l.p)}</span><span class="x" aria-hidden="true">${rep ? "⇄" : "+"}</span></span>`;
-  b.setAttribute("aria-label", (rep ? "Ersetzen durch: " : "Hinzufügen: ") + de(l.label));
+  const same = picks[cur].find(x => x.game === l.game);
+  const b = el("button", {className: "leg" + (l.warn ? " warn" : "") + (same ? " swap" : "")});
+  b.innerHTML = `<span><strong>${de(l.label)}</strong><small>${l.match}${same ? ` · <span class="rep">gleiches Spiel wie ${de(same.label)}, wird gemeinsam gerechnet</span>` : ""}${l.warn ? " · " + l.warn : ""}</small></span><span><span class="p">${pct(l.p)}</span><span class="x" aria-hidden="true">+</span></span>`;
+  b.setAttribute("aria-label", "Hinzufügen: " + de(l.label));
   b.onclick = () => add(l); return b;
 }
 function verdict() {
-  const list = picks[cur], p = list.reduce((a, l) => a * l.p, 1), v = document.getElementById("verdict");
+  const list = picks[cur], p = prob(list), v = document.getElementById("verdict");
   const q = parseFloat((odds[cur] || "").replace(",", "."));
   const pay = document.getElementById("payout"), eur = x => x.toFixed(2).replace(".", ",") + " €";
-  if (!list.length || !(q > 1)) { v.className = "verdict"; v.textContent = ""; pay.textContent = list.length ? "bwin-Quote eintragen, dann siehst du deinen Gewinn." : ""; return; }
+  if (!list.length || !(q > 1) || !(p > 0)) { v.className = "verdict"; v.textContent = ""; pay.textContent = list.length ? "bwin-Quote eintragen, dann siehst du deinen Gewinn." : ""; return; }
   const out = stake * q * TAX, avg = p * out - stake;
   pay.innerHTML = `Bei Treffer: <b>${eur(out)}</b> Auszahlung, <b>${eur(out - stake)}</b> Gewinn. Im Schnitt ${avg >= 0 ? "+" : "−"}${eur(Math.abs(avg))} pro Wette bei ${pct(p)} Trefferchance.`;
   const ev = p * q * TAX - 1;
@@ -136,7 +169,7 @@ function verdict() {
   v.title = "Erwartung pro Euro, 5 % Wettsteuer auf die Auszahlung eingerechnet";
 }
 function renderSlip() {
-  const s = D.slots[cur], list = picks[cur], ng = recGames(s), p = list.reduce((a, l) => a * l.p, 1);
+  const s = D.slots[cur], list = picks[cur], ng = recGames(s), p = prob(list);
   const box = document.getElementById("slip");
   const chips = el("div", {className: "chips"});
   if (!list.length) chips.append(el("span", {className: "lab", textContent: ng >= 4 ? "Noch leer. Tipp unten Legs an." : "Kein Vorschlag diese Woche, unter 4 Spiele mit Legs über 70 %. Tipp unten Legs an."}));
@@ -146,7 +179,7 @@ function renderSlip() {
     c.setAttribute("aria-label", "Entfernen: " + de(l.label));
     c.onclick = () => remove(l); chips.append(c);
   }
-  const msg = el("div", {className: "swapmsg", textContent: flash ? flash.text : ""});
+  const msg = el("div", {className: "swapmsg", textContent: list.length && !(p > 0) ? "Diese Legs schließen sich aus und können zusammen nicht gewinnen." : flash ? flash.text : ""});
   const row1 = el("div", {className: "row"});
   row1.innerHTML = `<div class="tot"><span class="big">${list.length ? pct(p) : "–"}</span><span class="lab">${list.length ? list.length + "er · fair " + fair(p) : ""}</span></div>`;
   const seg = el("div", {className: "seg"});
@@ -209,7 +242,7 @@ function render() {
   });
   main.replaceChildren(
     el("h2", {textContent: `Über 70 %, nur ${s.name} ${s.kick}`}),
-    el("p", {className: "lab", textContent: "+ fügt hinzu. Blauer Kasten mit ⇄: Das Spiel ist schon im Schein, antippen tauscht, weil bwin pro Spiel nur ein Leg kombiniert. Oben im Schein × entfernt."}),
+    el("p", {className: "lab", textContent: "+ fügt hinzu, oben im Schein entfernt ×. Blauer Kasten: gleiches Spiel wie ein Leg im Schein. Mehrere Legs aus einem Spiel hängen zusammen und werden gemeinsam gerechnet. Bei bwin läuft das über den Wettkonfigurator."}),
     top,
     el("h2", {textContent: `Weitere Optionen, nur ${s.name} ${s.kick}`}),
     el("p", {className: "lab", textContent: "Unter 70 %, schlechtes Wetter oder QB-Ausfall. Rechnet genauso mit, wird nur nicht empfohlen."}),
