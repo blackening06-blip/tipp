@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Tipp das</title>
+<title>Safe Bet</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#174a33">
 <link rel="icon" href="icon-192.png">
@@ -38,6 +38,7 @@ nav button[aria-pressed="true"]{background:#fff;color:var(--turf2)}
 .chip.new{border-color:var(--swap);background:color-mix(in srgb,var(--swap) 16%,var(--paper));animation:pop .9s ease-out}
 @keyframes pop{0%{transform:scale(1.08)}100%{transform:scale(1)}}
 @media (prefers-reduced-motion:reduce){.chip.new{animation:none}}
+.sliphead{font:800 20px/1 "Barlow Condensed",sans-serif;margin-bottom:8px}
 .swapmsg{margin-top:6px;font-size:13px;color:var(--swap);font-weight:600;min-height:0}
 .reset{width:100%;border:1.5px solid var(--turf);background:var(--turf);color:#fff;border-radius:8px;padding:8px 12px;font:700 14px Barlow,sans-serif;cursor:pointer}
 .reset:disabled{background:transparent;color:var(--mute);border-color:var(--line);cursor:default}
@@ -78,11 +79,33 @@ details.set{margin:24px 2px 0;color:var(--mute);font-size:13px}
 details.set input{width:100%;margin:8px 0;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink)}
 details.set button{border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:6px;padding:6px 12px;cursor:pointer}
 .empty{color:var(--mute);padding:20px 4px}
+.tb{display:inline-block;min-width:38px;padding:1px 6px;border-radius:5px;color:#fff;font:700 12.5px/1.3 Barlow,sans-serif;text-align:center;border-bottom:3px solid;vertical-align:middle}
+.pairs{margin-bottom:10px}
+.pday{font:800 18px "Barlow Condensed",sans-serif;color:var(--mute);padding:10px 0 2px}
+.pair{display:grid;grid-template-columns:46px 1fr auto;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}
+.pair:last-child{border-bottom:0}
+.pk{font:800 18px "Barlow Condensed",sans-serif}
+.nick{color:var(--mute);font-size:12.5px;margin:0 6px 0 5px}
+.ps{font:800 18px "Barlow Condensed",sans-serif}
+.po{grid-column:1/-1;font-size:12.5px;color:var(--no);font-weight:600;margin-top:4px}
+details.game summary .po{font-family:Barlow,sans-serif}
+.inf{color:var(--go);font-weight:600}
+details.team{border-bottom:1px solid var(--line)}
+details.team:last-child{border-bottom:0}
+details.team summary{display:flex;align-items:center;padding:11px 2px;cursor:pointer;list-style:none}
+details.team summary::-webkit-details-marker{display:none}
+details.team summary::after{content:"▾";margin-left:8px;color:var(--mute)}
+details.team[open] summary::after{content:"▴"}
+.cnt{margin-left:auto;font-size:13px;color:var(--mute)}
+.cnt.bad{color:var(--no);font-weight:600}
+.irow{padding:6px 2px 10px 46px;font-size:14px}
+.irow.bad span:not(.lab){color:var(--no)}
+.ilist{padding:0 2px 10px 46px;margin:0}
 </style>
 </head>
 <body>
 <header>
-  <h1><svg class="ball" viewBox="-50 -50 100 100" aria-hidden="true"><g transform="rotate(-35)"><path d="M-44 0Q0-52 44 0Q0 52-44 0Z" fill="#8b4a2b"/><g stroke="#fff" stroke-width="4" stroke-linecap="round"><path d="M-13 0H13M-10-5V5M-5-5V5M0-5V5M5-5V5M10-5V5"/><path d="M-27-14V14M27-14V14"/></g></g></svg>Tipp das</h1>
+  <h1><svg class="ball" viewBox="-50 -50 100 100" aria-hidden="true"><g transform="rotate(-35)"><path d="M-44 0Q0-52 44 0Q0 52-44 0Z" fill="#8b4a2b"/><g stroke="#fff" stroke-width="4" stroke-linecap="round"><path d="M-13 0H13M-10-5V5M-5-5V5M0-5V5M5-5V5M10-5V5"/><path d="M-27-14V14M27-14V14"/></g></g></svg>Safe Bet</h1>
   <div class="sub" id="sub">Lade Daten …</div>
   <button id="upd" class="upd" hidden>Daten aktualisieren</button>
   <div class="sub" id="status" aria-live="polite"></div>
@@ -103,7 +126,53 @@ const TAX = 0.95; // bwin zieht 5 % Wettsteuer vom Gewinn ab
 const el = (tag, props = {}) => Object.assign(document.createElement(tag), props);
 const store = {get: k => { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
                set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }};
-let cur = 0, picks = [], odds = [], flash = null, sizes = {}, stake = 2;
+let cur = 0, picks = [], odds = [], flash = null, sizes = {}, stake = 2, view = "slot";
+// Team-Kürzel in Teamfarben
+const tb = t => { const c = (D.colors || {})[t] || ["#5d6b63", "#9aa8a0"]; return `<span class="tb" style="background:${c[0]};border-color:${c[1]}">${t}</span>`; };
+const mt = m => m.split(" @ ").map(tb).join(" @ ");
+const outTxt = o => `${o.name} (${o.pos}, ${o.team}) ${o.st}${o.sub ? ", Ersatz: " + o.sub : ""}`;
+const gameOf = m => (D.games || []).find(g => `${g.away} @ ${g.home}` === m);
+const DIVS = ["AFC East", "AFC North", "AFC South", "AFC West", "NFC East", "NFC North", "NFC South", "NFC West"];
+function renderInj(main) {
+  const nk = x => ((D.colors || {})[x] || [])[2] || "";
+  main.replaceChildren(el("h2", {textContent: `Key Injuries Week ${D.week}`}),
+    el("p", {className: "lab", textContent: "QB, RB1, Top-2-WR und TE1 laut Injury Report, mit Ersatz laut Depth Chart. Team antippen zum Auf- und Zuklappen."}),
+    ...DIVS.map(dv => {
+      const sec = el("section", {className: "more pairs"});
+      sec.append(el("div", {className: "pday", textContent: dv}), ...D.teams.filter(x => x.div === dv).map(x => {
+        const d = el("details", {className: "team"}), sm = el("summary");
+        const out = x.outs.filter(o => o.out).length, q = x.outs.length - out;
+        const cnt = x.bye ? "Bye" : !x.outs.length ? "keine" : [out ? `${out} raus` : "", q ? `${q} fraglich` : ""].filter(Boolean).join(" · ");
+        sm.innerHTML = `${tb(x.t)}<span class="nick">${nk(x.t)}</span><span class="cnt${out ? " bad" : ""}">${cnt}</span>`;
+        d.append(sm);
+        if (x.bye) d.append(el("p", {className: "lab ilist", textContent: "Spielfrei diese Woche."}));
+        else if (!x.outs.length) d.append(el("p", {className: "lab ilist", textContent: "Keine wichtigen Ausfälle gemeldet."}));
+        else x.outs.forEach(o => {
+          const r = el("div", {className: "irow" + (o.out ? " bad" : "")});
+          r.innerHTML = `<strong>${o.name}</strong> <span class="lab">${o.pos}</span><br><span>${o.st}${o.sub ? ` · Ersatz: ${o.sub}` : ""}</span>`;
+          d.append(r);
+        });
+        return d;
+      }));
+      return sec;
+    }));
+}
+function renderPairs(main) {
+  const days = [...new Set(D.games.map(g => g.day))];
+  main.replaceChildren(el("h2", {textContent: `Pairings Week ${D.week}`}),
+    el("p", {className: "lab", textContent: "Alle Spiele der Woche, Anstoß deutsche Zeit. Rot: wichtige Ausfälle mit Ersatz laut Depth Chart."}),
+    ...days.map(day => {
+      const sec = el("section", {className: "more pairs"});
+      sec.append(el("div", {className: "pday", textContent: day}), ...D.games.filter(g => g.day === day).map(g => {
+        const r = el("div", {className: "pair"});
+        const nk = x => ((D.colors || {})[x] || [])[2] || "";
+        r.innerHTML = `<span class="pk">${g.kick}</span><span class="pm">${tb(g.away)}<span class="nick">${nk(g.away)}</span>@ ${tb(g.home)}<span class="nick">${nk(g.home)}</span></span><span class="ps">${g.score || ""}</span>`
+          + (g.outs.length ? `<div class="po">${g.outs.map(outTxt).join(" · ")}</div>` : "");
+        return r;
+      }));
+      return sec;
+    }));
+}
 const recGames = s => new Set(s.legs.filter(l => l.rec).map(l => l.game)).size;
 function suggest(i, n) {
   const out = [];
@@ -153,7 +222,7 @@ function remove(l) { picks[cur] = picks[cur].filter(x => x.id !== l.id); flash =
 function row(l) {
   const same = picks[cur].find(x => x.game === l.game);
   const b = el("button", {className: "leg" + (l.warn ? " warn" : "") + (same ? " swap" : "")});
-  b.innerHTML = `<span><strong>${de(l.label)}</strong><small>${l.match}${same ? ` · <span class="rep">gleiches Spiel wie ${de(same.label)}, wird gemeinsam gerechnet</span>` : ""}${l.warn ? " · " + l.warn : ""}</small></span><span><span class="p">${pct(l.p)}</span><span class="x" aria-hidden="true">+</span></span>`;
+  b.innerHTML = `<span><strong>${de(l.label)}</strong><small>${mt(l.match)}${same ? ` · <span class="rep">gleiches Spiel wie ${de(same.label)}, wird gemeinsam gerechnet</span>` : ""}${l.info ? ` · <span class="inf">${l.info}</span>` : ""}${l.warn ? " · " + l.warn : ""}</small></span><span><span class="p">${pct(l.p)}</span><span class="x" aria-hidden="true">+</span></span>`;
   b.setAttribute("aria-label", "Hinzufügen: " + de(l.label));
   b.onclick = () => add(l); return b;
 }
@@ -166,7 +235,7 @@ function verdict() {
   pay.innerHTML = `Bei Treffer: <b>${eur(out)}</b> Auszahlung, <b>${eur(out - stake)}</b> Gewinn. Im Schnitt ${avg >= 0 ? "+" : "−"}${eur(Math.abs(avg))} pro Wette bei ${pct(p)} Trefferchance.`;
   const ev = p * q * TAX - 1;
   v.className = "verdict " + (ev > 0 ? "go" : "no");
-  v.textContent = ev > 0 ? `Tipp das, +${Math.round(ev * 100)} %` : `Lieber lassen, ${Math.round(ev * 100)} %`;
+  v.textContent = ev > 0 ? `Lohnt sich, +${Math.round(ev * 100)} %` : `Lieber lassen, ${Math.round(ev * 100)} %`;
   v.title = "Erwartung pro Euro, 5 % Wettsteuer auf die Auszahlung eingerechnet";
 }
 function renderSlip() {
@@ -210,7 +279,7 @@ function renderSlip() {
     b.onclick = () => { stake = v; row3.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); verdict(); };
     row3.append(b);
   });
-  box.replaceChildren(chips, msg, row1, row2, row3, el("div", {id: "payout", className: "payout"}), ...(box2.children.length ? [box2] : []));
+  box.replaceChildren(el("div", {className: "sliphead", textContent: "Dein Tipp"}), chips, msg, row1, row2, row3, el("div", {id: "payout", className: "payout"}), ...(box2.children.length ? [box2] : []));
   verdict();
 }
 function settings() {
@@ -224,13 +293,25 @@ function settings() {
 function render() {
   const main = document.getElementById("main");
   document.getElementById("sub").textContent = `Week ${D.week}. Daten vom ${D.updated} Uhr, Anstoß deutsche Zeit.`;
+  const tabs = D.slots.map((x, i) => {
+    const b = el("button", {textContent: `${x.name} ${x.kick}`}); b.setAttribute("aria-pressed", view === "slot" && i === cur);
+    b.onclick = () => { cur = i; view = "slot"; flash = null; render(); }; return b;
+  });
+  if (D.games) {
+    const b = el("button", {textContent: "Pairings"}); b.setAttribute("aria-pressed", view === "pairs");
+    b.onclick = () => { view = "pairs"; render(); window.scrollTo(0, 0); }; tabs.push(b);
+  }
+  if (D.teams) {
+    const b = el("button", {textContent: "Verletzungen"}); b.setAttribute("aria-pressed", view === "inj");
+    b.onclick = () => { view = "inj"; render(); window.scrollTo(0, 0); }; tabs.push(b);
+  }
+  document.getElementById("tabs").replaceChildren(...tabs);
+  document.querySelector(".slip").hidden = view !== "slot" || !D.slots.length;
+  if (view === "pairs") { renderPairs(main); return; }
+  if (view === "inj") { renderInj(main); return; }
   if (!D.slots.length) { main.replaceChildren(el("p", {className: "empty", textContent: "Diesen Sonntag gibt es keine Spiele um 19:00 oder 22:05."}), ...(APP ? [settings()] : [])); return; }
   const s = D.slots[cur];
   if (!picks[cur]) picks[cur] = recGames(s) >= 4 ? suggest(cur, 4) : [];
-  document.getElementById("tabs").replaceChildren(...D.slots.map((x, i) => {
-    const b = el("button", {textContent: `${x.name} ${x.kick}`}); b.setAttribute("aria-pressed", i === cur);
-    b.onclick = () => { cur = i; flash = null; render(); }; return b;
-  }));
   renderSlip();
   const list = picks[cur], inSlip = l => list.some(x => x.game === l.game);
   const free = s.legs.filter(l => !list.some(x => x.id === l.id));
@@ -238,7 +319,9 @@ function render() {
   top.append(...free.filter(l => l.rec).sort((a, b) => inSlip(a) - inSlip(b)).map(row));
   const rest = [...new Set(free.map(l => l.match))].map(m => {
     const d = el("details", {className: "more game"});
-    d.append(el("summary", {textContent: m}), ...free.filter(l => l.match === m && !l.rec).map(row));
+    const sm = el("summary"), g = gameOf(m);
+    sm.innerHTML = mt(m) + (g && g.outs.length ? `<div class="po">${g.outs.map(outTxt).join(" · ")}</div>` : "");
+    d.append(sm, ...free.filter(l => l.match === m && !l.rec).map(row));
     return d;
   });
   main.replaceChildren(
