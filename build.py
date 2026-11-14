@@ -77,10 +77,13 @@ for _, r in S[(S.week == week) & S.result.isna() & (S.weekday == "Sunday")].iter
     ol = math.ceil(r.total_line - ALT) - 0.5
     tl = math.floor(pts[fav] - 6) + 0.5
     pen = 0.02 if outdoor else 0     # Freiluft trifft bei Über-Legs etwas seltener
-    legs = [("Sieg", f"Sieg {fav}", pf, False), ("SiegD", f"Sieg {dog}", 1 - pf, False),
-            ("HC", f"{dog} +{dl:g} Handicap", Phi((dl - fs) / 12.6), False),
-            ("OU", f"Über {ol:g} Punkte", Phi((r.total_line - ol) / 13) - pen, True),
-            ("TT", f"{fav} über {tl:g} Punkte", Phi((pts[fav] - tl) / 9.1) - pen, True)]
+    # d = Definition für die gemeinsame Rechnung mehrerer Legs aus einem Spiel
+    legs = [("Sieg", f"Sieg {fav}", pf, False, {"k": "win", "tm": fav}),
+            ("SiegD", f"Sieg {dog}", 1 - pf, False, {"k": "win", "tm": dog}),
+            ("HC", f"{dog} +{dl:g} Handicap", Phi((dl - fs) / 12.6), False, {"k": "hc", "tm": dog, "ln": dl}),
+            ("OU", f"Über {ol:g} Punkte", Phi((r.total_line - ol) / 13) - pen, True, {"k": "ou", "ln": ol}),
+            ("TT", f"{fav} über {tl:g} Punkte", Phi((pts[fav] - tl) / 9.1) - pen, True, {"k": "tt", "tm": fav, "ln": tl})]
+    gm = {"h": r.home_team, "a": r.away_team, "m": float(r.spread_line), "t": float(r.total_line)}
     cand = []
     for pid, h in P[P.player_id.isin([k for k, v in team_now.items() if v in pts])].groupby("player_id"):
         if status.get(pid) in ("Out", "Doubtful"):
@@ -89,12 +92,12 @@ for _, r in S[(S.week == week) & S.result.isna() & (S.weekday == "Sunday")].iter
         if len(h) >= 3:
             lam = (h.td.sum() + 1.2) / (len(h) + 6) * pts[team_now[pid]] / 22.5
             q = " (Q)" if status.get(pid) == "Questionable" else ""
-            cand.append((1 - math.exp(-lam), f"TD {h.player_display_name.iloc[-1]} ({team_now[pid]}){q}"))
-    legs += [(f"TD{i}", lab, p, False) for i, (p, lab) in enumerate(sorted(cand, reverse=True)[:4])]
+            cand.append((1 - math.exp(-lam), f"TD {h.player_display_name.iloc[-1]} ({team_now[pid]}){q}", {"k": "td", "tm": team_now[pid], "lam": round(lam, 4)}))
+    legs += [(f"TD{i}", lab, p, False, d) for i, (p, lab, d) in enumerate(sorted(cand, key=lambda c: -c[0])[:4])]
     s = slots.setdefault(sl, {"name": sl, "kick": kick.astimezone(DE).strftime("%H:%M"), "legs": []})
-    for kind, label, p, over in legs:
+    for kind, label, p, over, d in legs:
         warn = [w for w in ["Achtung: QB fällt aus, Linie prüfen" if qb else "", wx_note if over else ""] if w]
-        s["legs"].append(dict(id=f"{r.game_id}:{kind}", game=r.game_id, match=match, label=label, p=round(p, 3),
+        s["legs"].append(dict(id=f"{r.game_id}:{kind}", game=r.game_id, match=match, label=label, p=round(p, 3), d=d, gm=gm,
                               warn=" · ".join(warn), rec=p >= MIN_P and not qb and not (over and (bad_wx or (outdoor and not wx)))))
 for s in slots.values():
     s["legs"].sort(key=lambda l: (-l["p"], bool(l["warn"])))

@@ -123,6 +123,7 @@ const cache = {};
 function corr(legs) {
   const key = legs.map(l => l.id).sort().join();
   if (key in cache) return cache[key];
+  if (legs.some(l => !l.d || !l.gm)) return 1;  // alte data.json ohne Spieldaten: einfach multiplizieren
   const g = legs[0].gm, r = rng(42), N = 20000, one = legs.map(() => 0);
   const imp = {[g.h]: (g.t + g.m) / 2, [g.a]: (g.t - g.m) / 2};
   let all = 0;
