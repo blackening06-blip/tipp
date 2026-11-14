@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tipp das</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#174a33">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;800&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--turf:#1d5c3f;--turf2:#174a33;--chalk:#f6f7f2;--paper:#fff;--ink:#16201b;--mute:#5d6b63;--line:#dfe4dc;--go:#1d7a4b;--no:#b93a33;--swap:#2463c7;color-scheme:light;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--turf:#1a4d36;--turf2:#123826;--chalk:#121714;--paper:#1b221e;--ink:#e9eee9;--mute:#9aa8a0;--line:#2c3630;--go:#5fcf93;--no:#ef7a72;--swap:#7fa8ff;color-scheme:dark}}
+:root[data-theme="dark"]{--turf:#1a4d36;--turf2:#123826;--chalk:#121714;--paper:#1b221e;--ink:#e9eee9;--mute:#9aa8a0;--line:#2c3630;--go:#5fcf93;--no:#ef7a72;--swap:#7fa8ff;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--chalk);color:var(--ink);font:400 15px/1.45 Barlow,system-ui,sans-serif}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--turf2)}
+header{background:var(--turf) repeating-linear-gradient(90deg,transparent 0 47px,rgba(255,255,255,.13) 47px 49px);color:#fff;padding:18px 16px 14px}
+h1{font:800 36px/1 "Barlow Condensed",sans-serif;margin:0}
+.sub{opacity:.85;margin-top:5px;font-size:13.5px}
+.upd{margin-top:10px;border:0;border-radius:8px;padding:8px 14px;background:#fff;color:var(--turf2);font:700 14px Barlow,sans-serif;cursor:pointer}
+.upd:disabled{opacity:.6}
+.pin{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;box-shadow:0 6px 16px rgba(0,0,0,.18)}
+nav{background:var(--turf2);display:flex;gap:6px;padding:7px 12px;overflow-x:auto}
+nav button{flex:none;border:0;border-radius:999px;padding:6px 14px;font:600 14px Barlow,sans-serif;background:transparent;color:#dfeee5;cursor:pointer}
+nav button[aria-pressed="true"]{background:#fff;color:var(--turf2)}
+.slip{background:var(--paper);border-bottom:3px solid var(--turf);padding:10px 12px 10px}
+.slip .in{max-width:560px;margin:0 auto}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--chalk);color:var(--ink);border-radius:999px;padding:4px 6px 4px 11px;font:600 13.5px Barlow,sans-serif;cursor:pointer}
+.chip b{font:800 15px "Barlow Condensed",sans-serif}
+.chip .x{width:20px;height:20px;border-radius:50%;display:inline-grid;place-items:center;background:var(--line);color:var(--mute);font-size:13px}
+.chip.new{border-color:var(--swap);background:color-mix(in srgb,var(--swap) 16%,var(--paper));animation:pop .9s ease-out}
+@keyframes pop{0%{transform:scale(1.08)}100%{transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.chip.new{animation:none}}
+.swapmsg{margin-top:6px;font-size:13px;color:var(--swap);font-weight:600;min-height:0}
+.reset{width:100%;border:1.5px solid var(--turf);background:var(--turf);color:#fff;border-radius:8px;padding:8px 12px;font:700 14px Barlow,sans-serif;cursor:pointer}
+.reset:disabled{background:transparent;color:var(--mute);border-color:var(--line);cursor:default}
+.row{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap}
+.tot{display:flex;align-items:baseline;gap:6px}
+.big{font:800 30px/1 "Barlow Condensed",sans-serif}
+.lab{color:var(--mute);font-size:13px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:2px;margin-left:auto}
+.seg button{border:0;border-radius:999px;padding:5px 10px;font:600 13px Barlow,sans-serif;background:transparent;color:var(--mute);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--turf);color:#fff}
+.odds input{width:78px;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;background:var(--chalk);color:var(--ink);font:800 18px "Barlow Condensed",sans-serif}
+.verdict{font-weight:700;font-size:13.5px;padding:5px 10px;border-radius:999px}
+.verdict.go{background:color-mix(in srgb,var(--go) 16%,transparent);color:var(--go)}
+.verdict.no{background:color-mix(in srgb,var(--no) 16%,transparent);color:var(--no)}
+.stakes{gap:6px}
+.stakes button{border:1px solid var(--line);background:var(--chalk);color:var(--ink);border-radius:999px;padding:5px 11px;font:700 14px "Barlow Condensed",sans-serif;cursor:pointer}
+.stakes button[aria-pressed="true"]{background:var(--turf);border-color:var(--turf);color:#fff}
+.payout{margin-top:6px;font-size:13.5px;color:var(--mute)}
+.payout b{color:var(--ink)}
+main{max-width:560px;margin:0 auto;padding:6px 12px 40px}
+h2{font:800 22px "Barlow Condensed",sans-serif;margin:20px 2px 4px}
+.more{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:0 12px}
+.leg{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;border:0;border-bottom:1px solid var(--line);background:none;color:var(--ink);padding:10px 2px;text-align:left;cursor:pointer;font:inherit}
+.leg:last-child{border-bottom:0}
+.leg strong{display:block;font-weight:600}
+.leg small{color:var(--mute)}
+.leg .p{font:800 20px "Barlow Condensed",sans-serif;white-space:nowrap}
+.leg .x{color:var(--turf);font-size:18px;margin-left:8px}
+.leg.warn{border:1.5px solid var(--no);border-radius:8px;background:color-mix(in srgb,var(--no) 9%,transparent);padding:10px;margin:6px 0}
+.leg.warn small{color:var(--no);font-weight:600}
+.leg.swap{border:1.5px solid var(--swap);border-radius:8px;background:color-mix(in srgb,var(--swap) 10%,transparent);padding:10px;margin:6px 0}
+.leg.swap .x,.leg.swap .rep{color:var(--swap);font-weight:600}
+details.game{margin-bottom:8px}
+details.game summary{cursor:pointer;padding:12px 2px;font:700 18px "Barlow Condensed",sans-serif}
+button:focus-visible,input:focus-visible{outline:2px solid var(--swap);outline-offset:2px}
+.note{color:var(--mute);font-size:13px;margin:18px 2px}
+details.set{margin:24px 2px 0;color:var(--mute);font-size:13px}
+details.set input{width:100%;margin:8px 0;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink)}
+details.set button{border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:6px;padding:6px 12px;cursor:pointer}
+.empty{color:var(--mute);padding:20px 4px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Tipp das</h1>
+  <div class="sub" id="sub">Lade Daten …</div>
+  <button id="upd" class="upd" hidden>Daten aktualisieren</button>
+  <div class="sub" id="status" aria-live="polite"></div>
+</header>
+<div class="pin">
+  <nav id="tabs" aria-label="Slots"></nav>
+  <section class="slip" aria-label="Dein Schein"><div class="in" id="slip"></div></section>
+</div>
+<main id="main"></main>
+<script>
+const EMBED = /*DATA*/null;
+const APP = !EMBED;   // als App: Daten laden, Button und Einstellungen zeigen
+let D = {week: "?", updated: "", slots: []};
+const pct = p => Math.round(p * 100) + " %";
+const de = x => String(x).replace(".", ",");
+const fair = p => de((1 / p).toFixed(2));
+const TAX = 0.95; // bwin zieht 5 % Wettsteuer vom Gewinn ab
+const el = (tag, props = {}) => Object.assign(document.createElement(tag), props);
+const store = {get: k => { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
+               set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }};
+let cur = 0, picks = [], odds = [], flash = null, sizes = {}, stake = 2;
+const recGames = s => new Set(s.legs.filter(l => l.rec).map(l => l.game)).size;
+function suggest(i, n) {
+  const out = [];
+  for (const l of D.slots[i].legs) if (l.rec && out.length < n && !out.some(x => x.game === l.game)) out.push(l);
+  return out;
+}
+function add(l) {
+  const old = picks[cur].find(x => x.game === l.game);
+  picks[cur] = picks[cur].filter(x => x.game !== l.game).concat(l);
+  flash = {id: l.id, text: old ? `Getauscht: ${de(old.label)} → ${de(l.label)}` : `Neu: ${de(l.label)}`};
+  render();
+}
+function remove(l) { picks[cur] = picks[cur].filter(x => x.id !== l.id); flash = null; render(); }
+function row(l) {
+  const rep = picks[cur].find(x => x.game === l.game);
+  const b = el("button", {className: "leg" + (l.warn ? " warn" : "") + (rep ? " swap" : "")});
+  b.innerHTML = `<span><strong>${de(l.label)}</strong><small>${l.match}${rep ? ` · <span class="rep">ersetzt ${de(rep.label)}, gleiches Spiel</span>` : ""}${l.warn ? " · " + l.warn : ""}</small></span><span><span class="p">${pct(l.p)}</span><span class="x" aria-hidden="true">${rep ? "⇄" : "+"}</span></span>`;
+  b.setAttribute("aria-label", (rep ? "Ersetzen durch: " : "Hinzufügen: ") + de(l.label));
+  b.onclick = () => add(l); return b;
+}
+function verdict() {
+  const list = picks[cur], p = list.reduce((a, l) => a * l.p, 1), v = document.getElementById("verdict");
+  const q = parseFloat((odds[cur] || "").replace(",", "."));
+  const pay = document.getElementById("payout"), eur = x => x.toFixed(2).replace(".", ",") + " €";
+  if (!list.length || !(q > 1)) { v.className = "verdict"; v.textContent = ""; pay.textContent = list.length ? "bwin-Quote eintragen, dann siehst du deinen Gewinn." : ""; return; }
+  const out = stake * q * TAX, avg = p * out - stake;
+  pay.innerHTML = `Bei Treffer: <b>${eur(out)}</b> Auszahlung, <b>${eur(out - stake)}</b> Gewinn. Im Schnitt ${avg >= 0 ? "+" : "−"}${eur(Math.abs(avg))} pro Wette bei ${pct(p)} Trefferchance.`;
+  const ev = p * q * TAX - 1;
+  v.className = "verdict " + (ev > 0 ? "go" : "no");
+  v.textContent = ev > 0 ? `Tipp das, +${Math.round(ev * 100)} %` : `Lieber lassen, ${Math.round(ev * 100)} %`;
+  v.title = "Erwartung pro Euro, 5 % Wettsteuer auf die Auszahlung eingerechnet";
+}
+function renderSlip() {
+  const s = D.slots[cur], list = picks[cur], ng = recGames(s), p = list.reduce((a, l) => a * l.p, 1);
+  const box = document.getElementById("slip");
+  const chips = el("div", {className: "chips"});
+  if (!list.length) chips.append(el("span", {className: "lab", textContent: ng >= 4 ? "Noch leer. Tipp unten Legs an." : "Kein Vorschlag diese Woche, unter 4 Spiele mit Legs über 70 %. Tipp unten Legs an."}));
+  for (const l of list) {
+    const c = el("button", {className: "chip" + (flash && flash.id === l.id ? " new" : "")});
+    c.innerHTML = `${de(l.label)} <b>${pct(l.p)}</b><span class="x" aria-hidden="true">×</span>`;
+    c.setAttribute("aria-label", "Entfernen: " + de(l.label));
+    c.onclick = () => remove(l); chips.append(c);
+  }
+  const msg = el("div", {className: "swapmsg", textContent: flash ? flash.text : ""});
+  const row1 = el("div", {className: "row"});
+  row1.innerHTML = `<div class="tot"><span class="big">${list.length ? pct(p) : "–"}</span><span class="lab">${list.length ? list.length + "er · fair " + fair(p) : ""}</span></div>`;
+  const seg = el("div", {className: "seg"});
+  [4, 5].filter(n => n <= ng).forEach(n => {
+    const b = el("button", {textContent: `${n}er`}); b.title = `Vorschlag ${n}er`;
+    b.setAttribute("aria-pressed", list.length === n && list.every(l => l.rec));
+    b.onclick = () => { sizes[cur] = n; picks[cur] = suggest(cur, n); flash = null; render(); }; seg.append(b);
+  });
+  if (seg.children.length) row1.append(seg);
+  const box2 = el("div", {className: "row"});
+  const r = el("button", {className: "reset", textContent: "↺ Zurück auf Anfang"});
+  r.title = "Alle Slots wie beim Öffnen: empfohlene Kombis, Quote leer, Einsatz 2 €";
+  r.onclick = () => { show(D); flash = {id: "", text: "Alles zurückgesetzt, wie beim Öffnen."}; render(); window.scrollTo(0, 0); };
+  box2.append(r);
+  const row2 = el("div", {className: "row"});
+  const lab = el("label", {className: "odds"});
+  const inp = el("input", {inputmode: "decimal", placeholder: "bwin", value: odds[cur] || ""});
+  inp.setAttribute("aria-label", "Quote bei bwin");
+  inp.oninput = () => { odds[cur] = inp.value; verdict(); };
+  lab.append(el("span", {className: "lab", textContent: "Quote bei bwin "}), inp);
+  row2.append(lab, el("span", {id: "verdict", className: "verdict"}));
+  const row3 = el("div", {className: "row stakes"});
+  row3.append(el("span", {className: "lab", textContent: "Einsatz"}));
+  [1.5, 2, 3, 5].forEach(v => {
+    const b = el("button", {textContent: (v % 1 ? de(v.toFixed(2)) : v) + " €"});
+    b.setAttribute("aria-pressed", stake === v);
+    b.onclick = () => { stake = v; row3.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); verdict(); };
+    row3.append(b);
+  });
+  box.replaceChildren(chips, msg, row1, row2, row3, el("div", {id: "payout", className: "payout"}), ...(box2.children.length ? [box2] : []));
+  verdict();
+}
+function settings() {
+  const d = el("details", {className: "set"});
+  d.append(el("summary", {textContent: "Einstellungen"}),
+    el("p", {textContent: "GitHub-Token für „Daten aktualisieren“. Wird nur auf diesem Handy gespeichert."}));
+  const i = el("input", {type: "password", value: store.get("gh_token"), placeholder: "github_pat_…"});
+  const b = el("button", {textContent: "Token speichern", onclick: () => { store.set("gh_token", i.value.trim()); b.textContent = "Gespeichert"; }});
+  d.append(i, b); return d;
+}
+function render() {
+  const main = document.getElementById("main");
+  document.getElementById("sub").textContent = `Week ${D.week}. Daten vom ${D.updated} Uhr, Anstoß deutsche Zeit.`;
+  if (!D.slots.length) { main.replaceChildren(el("p", {className: "empty", textContent: "Diesen Sonntag gibt es keine Spiele um 19:00 oder 22:05."}), ...(APP ? [settings()] : [])); return; }
+  const s = D.slots[cur];
+  if (!picks[cur]) picks[cur] = recGames(s) >= 4 ? suggest(cur, 4) : [];
+  document.getElementById("tabs").replaceChildren(...D.slots.map((x, i) => {
+    const b = el("button", {textContent: `${x.name} ${x.kick}`}); b.setAttribute("aria-pressed", i === cur);
+    b.onclick = () => { cur = i; flash = null; render(); }; return b;
+  }));
+  renderSlip();
+  const list = picks[cur], inSlip = l => list.some(x => x.game === l.game);
+  const free = s.legs.filter(l => !list.some(x => x.id === l.id));
+  const top = el("div", {className: "more"});
+  top.append(...free.filter(l => l.rec).sort((a, b) => inSlip(a) - inSlip(b)).map(row));
+  const rest = [...new Set(free.map(l => l.match))].map(m => {
+    const d = el("details", {className: "more game"});
+    d.append(el("summary", {textContent: m}), ...free.filter(l => l.match === m && !l.rec).map(row));
+    return d;
+  });
+  main.replaceChildren(
+    el("h2", {textContent: `Über 70 %, nur ${s.name} ${s.kick}`}),
+    el("p", {className: "lab", textContent: "+ fügt hinzu. Blauer Kasten mit ⇄: Das Spiel ist schon im Schein, antippen tauscht, weil bwin pro Spiel nur ein Leg kombiniert. Oben im Schein × entfernt."}),
+    top,
+    el("h2", {textContent: `Weitere Optionen, nur ${s.name} ${s.kick}`}),
+    el("p", {className: "lab", textContent: "Unter 70 %, schlechtes Wetter oder QB-Ausfall. Rechnet genauso mit, wird nur nicht empfohlen."}),
+    ...rest,
+    el("p", {className: "note", textContent: "Siegchancen aus den Marktlinien ohne Buchmacher-Marge. Handicap und Über-Punkte 7 Punkte, Team-Punkte 6 Punkte vorsichtiger als die Linie. Über-Legs im Freien fliegen bei Wind ab 16 km/h oder Regen aus der Empfehlung. Die 5 % Wettsteuer auf die Auszahlung sind im Urteil und im Gewinn eingerechnet." + (APP ? "" : " Neue Daten: im Chat „NFL Update“ schreiben.")}),
+    ...(APP ? [settings()] : []));
+}
+function show(data) {
+  D = data; picks = D.slots.map(() => null); odds = D.slots.map(() => ""); flash = null; sizes = {}; stake = 2;
+  const e = D.slots.findIndex(s => s.name === "Früh"); cur = e >= 0 ? e : 0; render();
+}
+async function load() {
+  const r = await fetch("data.json?t=" + Date.now(), {cache: "no-store"});
+  if (!r.ok) throw new Error("data.json nicht gefunden");
+  return r.json();
+}
+async function update() {
+  const st = document.getElementById("status"), btn = document.getElementById("upd"), token = store.get("gh_token");
+  if (!token) { st.textContent = "Erst unten in den Einstellungen den GitHub-Token speichern."; return; }
+  const owner = location.hostname.split(".")[0], repo = location.pathname.split("/")[1];
+  btn.disabled = true; st.textContent = "Berechnung gestartet, dauert 2–4 Minuten …";
+  try {
+    const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/update.yml/dispatches`, {
+      method: "POST", headers: {Authorization: "Bearer " + token, Accept: "application/vnd.github+json"},
+      body: JSON.stringify({ref: "main"})});
+    if (r.status !== 204) throw new Error(r.status === 401 ? "Token ungültig" : "GitHub antwortet mit " + r.status);
+    const before = D.updated;
+    for (let i = 0; i < 40; i++) {
+      await new Promise(res => setTimeout(res, 15000));
+      const d = await load().catch(() => null);
+      if (d && d.updated !== before) { show(d); st.textContent = "Aktualisiert."; btn.disabled = false; return; }
+    }
+    st.textContent = "Dauert länger als üblich. Lade die Seite in ein paar Minuten neu.";
+  } catch (err) { st.textContent = "Aktualisieren fehlgeschlagen: " + err.message; }
+  btn.disabled = false;
+}
+if (APP) {
+  const b = document.getElementById("upd"); b.hidden = false; b.onclick = update;
+  load().then(show).catch(() => { document.getElementById("sub").textContent = "Noch keine Daten. Starte einmal „Daten aktualisieren“."; document.getElementById("main").replaceChildren(settings()); });
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+} else show(EMBED);
+</script>
+</body>
+</html>
