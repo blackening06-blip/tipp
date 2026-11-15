@@ -1,0 +1,5 @@
+{
+  "_info": "TV-Sender je Spiel, falls die automatische Suche nichts findet. Schlüssel: Saison-Woche, Spiel als AUSWÄRTS@HEIM, Sender RTL, RTL+ oder Sky.",
+  "2026-10": {"WAS@NYG": "RTL", "NE@DET": "RTL", "KC@ATL": "RTL", "BUF@NYJ": "RTL+", "MIN@GB": "Sky",
+              "SF@DAL": "RTL", "SEA@LV": "Sky", "PIT@CIN": "RTL", "LAC@BAL": "RTL"}
+}

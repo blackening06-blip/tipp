@@ -24,14 +24,20 @@ def slot(et_hour):
     return "Früh" if et_hour == 13 else "Spät" if et_hour == 16 else None
 
 
-def weather(team, kick_utc):
+NEUTRAL = {"FC Bayern Munich Stadium": (48.219, 11.625)}   # Auslandsspiele unter freiem Himmel
+_WX = {}
+
+
+def weather(team, kick_utc, coords=None):
     """Max. Wind (km/h) und Regen (mm) über 3 Stunden ab Kick-off, None wenn unbekannt."""
-    if team not in STADIUM:
+    if (team, kick_utc) in _WX:
+        return _WX[(team, kick_utc)]
+    if not coords and team not in STADIUM:
         print(f"  Wetter {team}: kein Freiluftstadion hinterlegt")
         return None
-    lat, lon = STADIUM[team]
+    lat, lon = coords or STADIUM[team]
     url = (f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
-           f"&hourly=wind_speed_10m,precipitation&wind_speed_unit=kmh&timezone=UTC&past_days=1&forecast_days=10")
+           f"&hourly=wind_speed_10m,precipitation,temperature_2m,weather_code,is_day&wind_speed_unit=kmh&timezone=UTC&past_days=1&forecast_days=10")
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "tipp-das/1.0"})
         h = json.load(urllib.request.urlopen(req, timeout=20))["hourly"]
@@ -39,11 +45,14 @@ def weather(team, kick_utc):
         idx = [h["time"].index(k) for k in keys if k in h["time"]]
         wind = [h["wind_speed_10m"][i] for i in idx if h["wind_speed_10m"][i] is not None]
         rain = [h["precipitation"][i] for i in idx if h["precipitation"][i] is not None]
+        temp = [h["temperature_2m"][i] for i in idx if h["temperature_2m"][i] is not None]
         if not wind:
             print(f"  Wetter {team}: keine Werte für {keys[0]}")
             return None
         print(f"  Wetter {team}: Wind {max(wind):.0f} km/h, Regen {sum(rain):.1f} mm")
-        return max(wind), sum(rain)
+        code = max((h["weather_code"][i] for i in idx if h["weather_code"][i] is not None), default=None)  # schlechtestes Wetter im Spiel
+        _WX[(team, kick_utc)] = (max(wind), sum(rain), sum(temp) / len(temp) if temp else None, code, h["is_day"][idx[0]])
+        return _WX[(team, kick_utc)]
     except Exception as e:
         print(f"  Wetter {team}: Fehler {e}")
         return None
@@ -81,6 +90,8 @@ def outs(team):
         ids = [d[0] for d in dep]
         rank = ids.index(i.gsis_id) if i.gsis_id in ids else None
         best = CUR[(CUR.team == team) & (CUR.position == pos)].groupby("player_id").fantasy_points_ppr.sum().nlargest(TOPN[pos]).index
+        if pos == "QB" and rank != 0:   # QB zählt nur, wenn er aktuell Starter ist (z. B. nach Trade nicht mehr)
+            continue
         if not ((rank is not None and rank < TOPN[pos]) or i.gsis_id in best):
             continue
         start = max(STARTERS[pos], rank + 1) if rank is not None else (0 if pos == "QB" else STARTERS[pos])
@@ -158,15 +169,60 @@ for _, r in S[(S.week == week) & S.result.isna() & (S.weekday == "Sunday")].iter
                               warn=" · ".join(warn), rec=p >= MIN_P and not qb and not (over and (bad_wx or (outdoor and not wx)))))
 for s in slots.values():
     s["legs"].sort(key=lambda l: (-l["p"], bool(l["warn"])))
+def qb_now(team, name):
+    """Eingeplanter QB, bei Ausfall sein Ersatz laut Depth Chart."""
+    o = next((o for o in OUTS[team] if o["pos"] == "QB" and o["out"] and o["name"] == name), None)
+    return f"{o['sub']} (für {name})" if o and o["sub"] else (name or "")
+
+
+import re
+T = nfl.load_teams().to_pandas()
+TV_URLS = ["https://ran.joyn.de/sports/american-football/nfl/nfl-live-diese-{m}-werden-in-woche{w}-kostenlos-gezeigt-uebertragungen-im-free-tv-{s}-173951"
+           .format(m=m, w=week, s=s) for m in ("matches", "spiele") for s in ("stream-ticker", "livestream-und-ticker", "stream-und-ticker")]
+
+
+def tv():
+    """TV-Sender je Spiel: erst tv.json (von Hand), sonst die Wochenübersicht von ran.de."""
+    try:
+        manual = json.load(open("tv.json", encoding="utf-8")).get(f"{SEASON}-{week}")
+        if manual:
+            print("  TV: aus tv.json"); return manual
+    except Exception:
+        pass
+    names = {n: a for a, n in zip(T.team_abbr, T.team_name)}
+    for url in TV_URLS:
+        try:
+            html = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}), timeout=20).read().decode("utf-8", "ignore")
+        except Exception:
+            continue
+        text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html))
+        res = {}
+        for away, home, ch in re.findall(r"Uhr: ([A-Z][\w .]+?) at ([A-Z][\w .]+?)(?: aus \w+)? \(([^)]*)\)", text):
+            a, h = names.get(away.strip()), names.get(home.strip())
+            if a and h:
+                res[f"{a}@{h}"] = "RTL" if "Free-TV/RTL" in ch else "RTL+" if "RTL+" in ch else "Sky" if "Sky" in ch else ""
+        if res:
+            print(f"  TV: {len(res)} Spiele von ran.de"); return res
+    print("  TV: keine Daten gefunden"); return {}
+
+
+TV = tv()
 DAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 games = []
 for _, r in S[S.week == week].iterrows():
     k = datetime.fromisoformat(f"{r.gameday} {r.gametime}").replace(tzinfo=ET).astimezone(DE)
-    games.append(dict(t=k.isoformat(), day=f"{DAYS[k.weekday()]} {k:%d.%m.}", kick=f"{k:%H:%M}", away=r.away_team, home=r.home_team,
+    if r.location == "Neutral" and r.stadium in NEUTRAL:
+        w = weather(r.home_team, k.astimezone(UTC), NEUTRAL[r.stadium]); roof = "outdoors"
+    else:
+        roof = r.roof if r.roof == r.roof else "dach"
+        w = weather(r.home_team, k.astimezone(UTC)) if roof in ("outdoors", "open") else None
+    wx = ({"roof": "Halle"} if roof in ("dome", "closed") else {"roof": "Dach"} if roof == "dach"
+          else {"w": round(w[0]), "r": round(w[1], 1), "t": None if w[2] is None else round(w[2]), "c": w[3], "d": w[4]} if w else {"roof": "?"})
+    games.append(dict(t=k.isoformat(), wx=wx, tv=TV.get(f"{r.away_team}@{r.home_team}", ""), day=f"{DAYS[k.weekday()]} {k:%d.%m.}", kick=f"{k:%H:%M}", away=r.away_team, home=r.home_team,
                       score=None if r.result != r.result else f"{int(r.away_score)}:{int(r.home_score)}",
+                      qbs=[qb_now(r.away_team, r.away_qb_name), qb_now(r.home_team, r.home_qb_name)],
                       outs=OUTS[r.away_team] + OUTS[r.home_team]))
 games.sort(key=lambda g: g["t"])
-T = nfl.load_teams().to_pandas()
 colors = {a: [c1, c2, nk] for a, c1, c2, nk in zip(T.team_abbr, T.team_color, T.team_color2, T.team_nick)}
 DIV = dict(zip(T.team_abbr, T.team_division))
 teams = [dict(t=t, div=DIV.get(t, ""), bye=t not in set(S[S.week == week].home_team) | set(S[S.week == week].away_team),
