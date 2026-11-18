@@ -79,6 +79,15 @@ details.set{margin:24px 2px 0;color:var(--mute);font-size:13px}
 details.set input{width:100%;margin:8px 0;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink)}
 details.set button{border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:6px;padding:6px 12px;cursor:pointer}
 .empty{color:var(--mute);padding:20px 4px}
+.chip .adj{border:0;cursor:pointer;font-weight:700;background:var(--line);color:var(--ink)}
+.chip button.x{border:0;cursor:pointer;font:inherit}
+.drow{display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:4px 2px 8px 46px}
+.dpos{width:26px;font:800 14px "Barlow Condensed",sans-serif;color:var(--mute)}
+.dchip{border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:13px;background:var(--chalk)}
+.dchip:nth-child(2){font-weight:700;border-color:var(--turf)}
+.dchip.bad{border-color:var(--no);color:var(--no);text-decoration:line-through}
+.dchip.q{border-color:#c89a1c;color:#a77d08}
+
 .tb{display:inline-block;min-width:38px;padding:1px 6px;border-radius:5px;color:#fff;font:700 12.5px/1.3 Barlow,sans-serif;text-align:center;border-bottom:3px solid;vertical-align:middle}
 .pairs{margin-bottom:10px}
 .pday{font:800 18px "Barlow Condensed",sans-serif;color:var(--mute);padding:10px 0 2px}
@@ -137,6 +146,19 @@ let cur = 0, picks = [], odds = [], flash = null, sizes = {}, stake = 2, view = 
 // Team-Kürzel in Teamfarben
 const tb = t => { const c = (D.colors || {})[t] || ["#5d6b63", "#9aa8a0"]; return `<span class="tb" style="background:${c[0]};border-color:${c[1]}">${t}</span>`; };
 const mt = m => m.split(" @ ").map(tb).join(" @ ");
+// Nach Anstoß ist „Questionable“ entschieden: dann nur noch echte Ausfälle zeigen
+const gameOfT = t => (D.games || []).find(g => g.away === t || g.home === t);
+const live = g => !!g && Date.now() >= Date.parse(g.t);
+const shownOuts = (os, g) => live(g) ? os.filter(o => o.out) : os;
+const legLabel = l => live(gameOf(l.match)) ? l.label.replace(" (Q)", "") : l.label;
+// Normalverteilung für angepasste Linien
+const phi = x => { const t = 1 / (1 + 0.3275911 * Math.abs(x) / Math.SQRT2), e = 1 - t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429)))) * Math.exp(-x * x / 2); return 0.5 * (1 + Math.sign(x) * e); };
+function adj(l, step) {
+  const ln = l.d.ln + step, p = Math.max(0.01, phi((l.d.mu - ln) / l.d.sd) - (l.d.pen || 0));
+  const n = {...l, d: {...l.d, ln}, p, label: l.d.tpl.replace("{ln}", ln)};
+  picks[cur] = picks[cur].map(x => x.id === l.id ? n : x);
+  flash = {id: l.id, text: `Linie angepasst: ${de(n.label)}, ${pct(p)}`}; render();
+}
 const outTxt = o => `${o.name} (${o.pos}, ${o.team}) ${o.st}${o.sub ? ", Ersatz: " + o.sub : ""}`;
 // Wetter zum Anstoß: Temperatur in °C, Wind, Regen. Halle oder Dach statt Wetter.
 // Wettersymbol aus dem WMO-Code von Open-Meteo, nachts Mond statt Sonne
@@ -161,18 +183,43 @@ function renderInj(main) {
     ...DIVS.map(dv => {
       const sec = el("section", {className: "more pairs"});
       sec.append(el("div", {className: "pday", textContent: dv}), ...D.teams.filter(x => x.div === dv).map(x => {
-        const d = el("details", {className: "team"}), sm = el("summary");
-        const out = x.outs.filter(o => o.out).length, q = x.outs.length - out;
-        const cnt = x.bye ? "Bye" : !x.outs.length ? "keine" : [out ? `${out} raus` : "", q ? `${q} fraglich` : ""].filter(Boolean).join(" · ");
+        const d = el("details", {className: "team"}), sm = el("summary"), xo = shownOuts(x.outs, gameOfT(x.t));
+        const out = xo.filter(o => o.out).length, q = xo.length - out;
+        const cnt = x.bye ? "Bye" : !xo.length ? "keine" : [out ? `${out} raus` : "", q ? `${q} fraglich` : ""].filter(Boolean).join(" · ");
         sm.innerHTML = `${tb(x.t)}<span class="nick">${nk(x.t)}</span><span class="cnt${out ? " bad" : ""}">${cnt}</span>`;
         d.append(sm);
         if (x.bye) d.append(el("p", {className: "lab ilist", textContent: "Spielfrei diese Woche."}));
-        else if (!x.outs.length) d.append(el("p", {className: "lab ilist", textContent: "Keine wichtigen Ausfälle gemeldet."}));
-        else x.outs.forEach(o => {
+        else if (!xo.length) d.append(el("p", {className: "lab ilist", textContent: "Keine wichtigen Ausfälle gemeldet."}));
+        else xo.forEach(o => {
           const r = el("div", {className: "irow" + (o.out ? " bad" : "")});
           r.innerHTML = `<strong>${o.name}</strong> <span class="lab">${o.pos}</span><br><span>${o.st}${o.sub ? ` · Ersatz: ${o.sub}` : ""}</span>`;
           d.append(r);
         });
+        return d;
+      }));
+      return sec;
+    }));
+}
+function renderDepth(main) {
+  const nk = x => ((D.colors || {})[x] || [])[2] || "";
+  main.replaceChildren(el("h2", {textContent: "Depth Charts"}),
+    el("p", {className: "lab", textContent: "Aktuellster Stand pro Team: QB, RB, WR, TE in Reihenfolge. Rot fällt aus, gelb fraglich. Team antippen zum Aufklappen."}),
+    ...DIVS.map(dv => {
+      const sec = el("section", {className: "more pairs"});
+      sec.append(el("div", {className: "pday", textContent: dv}), ...D.teams.filter(x => x.div === dv).map(x => {
+        const d = el("details", {className: "team"}), sm = el("summary"), started = live(gameOfT(x.t));
+        sm.innerHTML = `${tb(x.t)}<span class="nick">${nk(x.t)}</span>`;
+        d.append(sm);
+        for (const [pos, list] of Object.entries(x.depth)) {
+          const r = el("div", {className: "drow"});
+          r.append(el("span", {className: "dpos", textContent: pos}));
+          list.forEach(([n, st]) => {
+            const bad = st === "Out" || st === "Doubtful", q = st === "Questionable" && !started;
+            const c = el("span", {className: "dchip" + (bad ? " bad" : q ? " q" : ""), textContent: n + (bad ? " · raus" : q ? " · Q" : "")});
+            r.append(c);
+          });
+          d.append(r);
+        }
         return d;
       }));
       return sec;
@@ -189,7 +236,7 @@ function renderPairs(main) {
         const nk = x => ((D.colors || {})[x] || [])[2] || "";
         r.innerHTML = `<span class="pk">${g.kick}${tvPill(g.tv)}</span><span class="pm">${tb(g.away)}<span class="nick">${nk(g.away)}</span>@ ${tb(g.home)}<span class="nick">${nk(g.home)}</span></span><span class="ps">${g.score || wxTxt(g.wx)}</span>`
           + (g.qbs && g.qbs.join("") ? `<div class="pq">QBs: ${g.qbs.join(" – ")}</div>` : "")
-          + (g.outs.length ? `<div class="po">${g.outs.map(outTxt).join(" · ")}</div>` : "");
+          + (shownOuts(g.outs, g).length ? `<div class="po">${shownOuts(g.outs, g).map(outTxt).join(" · ")}</div>` : "");
         return r;
       }));
       return sec;
@@ -212,7 +259,7 @@ function add(l) {
 function rng(s) { return () => { s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const cache = {};
 function corr(legs) {
-  const key = legs.map(l => l.id).sort().join();
+  const key = legs.map(l => l.id + "@" + (l.d && l.d.ln)).sort().join();
   if (key in cache) return cache[key];
   if (legs.some(l => !l.d || !l.gm)) return 1;  // alte data.json ohne Spieldaten: einfach multiplizieren
   const g = legs[0].gm, r = rng(42), N = 20000, one = legs.map(() => 0);
@@ -227,6 +274,7 @@ function corr(legs) {
       const d = l.d, opp = d.tm === g.h ? g.a : g.h;
       const hit = d.k === "win" ? sc[d.tm] > sc[opp] : d.k === "hc" ? sc[d.tm] + d.ln > sc[opp]
         : d.k === "ou" ? t > d.ln : d.k === "tt" ? sc[d.tm] > d.ln
+        : d.k === "h1" ? 0.52 * sc[d.tm] + 4.6 * Math.sqrt(-2 * Math.log(r() + 1e-12)) * Math.cos(2 * Math.PI * r()) > d.ln
         : r() < 1 - Math.exp(-d.lam * Math.max(sc[d.tm], 0) / imp[d.tm]);
       if (hit) one[j]++; else ok = false;
     });
@@ -244,7 +292,7 @@ function remove(l) { picks[cur] = picks[cur].filter(x => x.id !== l.id); flash =
 function row(l) {
   const same = picks[cur].find(x => x.game === l.game);
   const b = el("button", {className: "leg" + (l.warn ? " warn" : "") + (same ? " swap" : "")});
-  b.innerHTML = `<span><strong>${de(l.label)}</strong><small>${mt(l.match)}${tvOf(l.match)}${same ? ` · <span class="rep">gleiches Spiel wie ${de(same.label)}, wird gemeinsam gerechnet</span>` : ""}${l.info ? ` · <span class="inf">${l.info}</span>` : ""}${l.warn ? " · " + l.warn : ""}</small></span><span><span class="p">${pct(l.p)}</span><span class="x" aria-hidden="true">+</span></span>`;
+  b.innerHTML = `<span><strong>${de(legLabel(l))}</strong><small>${mt(l.match)}${tvOf(l.match)}${same ? ` · <span class="rep">gleiches Spiel wie ${de(same.label)}, wird gemeinsam gerechnet</span>` : ""}${l.info ? ` · <span class="inf">${l.info}</span>` : ""}${l.warn ? " · " + l.warn : ""}</small></span><span><span class="p">${pct(l.p)}</span><span class="x" aria-hidden="true">+</span></span>`;
   b.setAttribute("aria-label", "Hinzufügen: " + de(l.label));
   b.onclick = () => add(l); return b;
 }
@@ -266,10 +314,15 @@ function renderSlip() {
   const chips = el("div", {className: "chips"});
   if (!list.length) chips.append(el("span", {className: "lab", textContent: ng >= 4 ? "Noch leer. Tipp unten Legs an." : "Kein Vorschlag diese Woche, unter 4 Spiele mit Legs über 70 %. Tipp unten Legs an."}));
   for (const l of list) {
-    const c = el("button", {className: "chip" + (flash && flash.id === l.id ? " new" : "")});
-    c.innerHTML = `${de(l.label)} <b>${pct(l.p)}</b><span class="x" aria-hidden="true">×</span>`;
-    c.setAttribute("aria-label", "Entfernen: " + de(l.label));
-    c.onclick = () => remove(l); chips.append(c);
+    const c = el("span", {className: "chip" + (flash && flash.id === l.id ? " new" : "")});
+    c.append(el("span", {textContent: de(legLabel(l)) + " "}), el("b", {textContent: pct(l.p)}));
+    if (l.d && l.d.mu != null) [[-1, "−"], [1, "+"]].forEach(([s, t]) => {
+      const b = el("button", {className: "x adj", textContent: t, title: s < 0 ? "Linie 1 Punkt niedriger" : "Linie 1 Punkt höher"});
+      b.setAttribute("aria-label", (s < 0 ? "Linie senken: " : "Linie erhöhen: ") + de(l.label)); b.onclick = () => adj(l, s); c.append(b);
+    });
+    const x = el("button", {className: "x", textContent: "×"});
+    x.setAttribute("aria-label", "Entfernen: " + de(l.label)); x.onclick = () => remove(l); c.append(x);
+    chips.append(c);
   }
   const msg = el("div", {className: "swapmsg", textContent: list.length && !(p > 0) ? "Diese Legs schließen sich aus und können zusammen nicht gewinnen." : flash ? flash.text : ""});
   const row1 = el("div", {className: "row"});
@@ -323,6 +376,10 @@ function render() {
     const b = el("button", {textContent: "Pairings"}); b.setAttribute("aria-pressed", view === "pairs");
     b.onclick = () => { view = "pairs"; render(); window.scrollTo(0, 0); }; tabs.push(b);
   }
+  if (D.teams && D.teams[0] && D.teams[0].depth) {
+    const b = el("button", {textContent: "Depth Charts"}); b.setAttribute("aria-pressed", view === "depth");
+    b.onclick = () => { view = "depth"; render(); window.scrollTo(0, 0); }; tabs.push(b);
+  }
   if (D.teams) {
     const b = el("button", {textContent: "Verletzungen"}); b.setAttribute("aria-pressed", view === "inj");
     b.onclick = () => { view = "inj"; render(); window.scrollTo(0, 0); }; tabs.push(b);
@@ -331,6 +388,7 @@ function render() {
   document.querySelector(".slip").hidden = view !== "slot" || !D.slots.length;
   if (view === "pairs") { renderPairs(main); return; }
   if (view === "inj") { renderInj(main); return; }
+  if (view === "depth") { renderDepth(main); return; }
   if (!D.slots.length) { main.replaceChildren(el("p", {className: "empty", textContent: "Diesen Sonntag gibt es keine Spiele um 19:00 oder 22:05."}), ...(APP ? [settings()] : [])); return; }
   const s = D.slots[cur];
   if (!picks[cur]) picks[cur] = recGames(s) >= 4 ? suggest(cur, 4) : [];
@@ -342,7 +400,8 @@ function render() {
   const rest = [...new Set(free.map(l => l.match))].map(m => {
     const d = el("details", {className: "more game"});
     const sm = el("summary"), g = gameOf(m);
-    sm.innerHTML = mt(m) + tvOf(m) + (g && g.outs.length ? `<div class="po">${g.outs.map(outTxt).join(" · ")}</div>` : "");
+    const so = g ? shownOuts(g.outs, g) : [];
+    sm.innerHTML = mt(m) + tvOf(m) + (so.length ? `<div class="po">${so.map(outTxt).join(" · ")}</div>` : "");
     d.append(sm, ...free.filter(l => l.match === m && !l.rec).map(row));
     return d;
   });
@@ -385,8 +444,8 @@ async function update() {
       body: JSON.stringify({ref: "main"})});
     if (r.status !== 204) throw new Error(r.status === 401 ? "Token ungültig" : "GitHub antwortet mit " + r.status);
     const before = D.updated;
-    for (let i = 0; i < 40; i++) {
-      await new Promise(res => setTimeout(res, 15000));
+    for (let i = 0; i < 60; i++) {
+      await new Promise(res => setTimeout(res, i < 6 ? 15000 : 6000));
       const d = await load().catch(() => null);
       if (d && d.updated !== before) { show(d); st.textContent = "Aktualisiert."; btn.disabled = false; return; }
     }

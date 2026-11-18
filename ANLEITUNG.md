@@ -32,7 +32,7 @@ Der Token darf nur diese eine Berechnung starten. Damit kann niemand an deinen C
 3. App öffnen, ganz unten **Einstellungen** aufklappen, Token einfügen, **Token speichern**.
 
 ## So nutzt du sie
-- Die Daten aktualisieren sich jeden Sonntag um 11:00 und 17:00 Uhr von selbst.
+- Die Daten aktualisieren sich jeden Sonntag um 11:00, 17:00, 18:43 und 21:48 Uhr von selbst (GitHub startet manchmal ein paar Minuten später).
 - **Daten aktualisieren** startet sofort eine neue Berechnung, nach 2–4 Minuten lädt die Seite die neuen Werte.
 - Beste Zeit: Sonntag ab 17:00 Uhr. Dann stehen Verletzungsstatus und Wetter fest.
 

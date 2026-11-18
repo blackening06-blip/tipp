@@ -20,10 +20,6 @@ STADIUM = {"BUF": (42.774, -78.787), "NYJ": (40.814, -74.074), "NYG": (40.814, -
            "TB": (27.976, -82.503)}
 
 
-def slot(et_hour):
-    return "Früh" if et_hour == 13 else "Spät" if et_hour == 16 else None
-
-
 NEUTRAL = {"FC Bayern Munich Stadium": (48.219, 11.625)}   # Auslandsspiele unter freiem Himmel
 _WX = {}
 
@@ -105,12 +101,67 @@ TEAMS = sorted(set(S.home_team))
 OUTS = {t: outs(t) for t in TEAMS}
 LAST = CUR.groupby("team").apply(lambda g: g.week.max()).to_dict()   # letzte gespielte Woche je Team
 
+import re
+T = nfl.load_teams().to_pandas()
+TV_URLS = ["https://ran.joyn.de/sports/american-football/nfl/nfl-live-diese-{m}-werden-in-woche{w}-kostenlos-gezeigt-uebertragungen-im-free-tv-{s}-173951"
+           .format(m=m, w=week, s=s) for m in ("matches", "spiele") for s in ("stream-ticker", "livestream-und-ticker", "stream-und-ticker")]
+
+
+def tv():
+    """TV-Sender je Spiel: erst tv.json (von Hand), sonst die Wochenübersicht von ran.de."""
+    try:
+        manual = json.load(open("tv.json", encoding="utf-8")).get(f"{SEASON}-{week}")
+        if manual:
+            print("  TV: aus tv.json"); return manual
+    except Exception:
+        pass
+    names = {n: a for a, n in zip(T.team_abbr, T.team_name)}
+    for url in TV_URLS:
+        try:
+            html = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}), timeout=20).read().decode("utf-8", "ignore")
+        except Exception:
+            continue
+        text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html))
+        res = {}
+        for hm, away, home, ch in re.findall(r"(\d{2}:\d{2}) Uhr: ([A-Z][\w .]+?) at ([A-Z][\w .]+?)(?: aus \w+)? \(([^)]*)\)", text):
+            a, h = names.get(away.strip()), names.get(home.strip())
+            if a and h:
+                res[f"{a}@{h}"] = {"ch": "RTL" if "Free-TV/RTL" in ch else "RTL+" if "RTL+" in ch else "Sky" if "Sky" in ch else "", "time": hm}
+        if res:
+            print(f"  TV: {len(res)} Spiele von ran.de"); return res
+    print("  TV: keine Daten gefunden"); return {}
+
+
+TV = tv()
+
+
+def tv_ch(a, h):
+    v = TV.get(f"{a}@{h}", "")
+    return v.get("ch", "") if isinstance(v, dict) else v
+
+
+def kick_de(r):
+    """Anstoß in deutscher Zeit. Steht im TV-Plan eine verlegte Sonntagszeit, gilt die (die NFL verschiebt Spiele kurzfristig)."""
+    k = datetime.fromisoformat(f"{r.gameday} {r.gametime}").replace(tzinfo=ET).astimezone(DE)
+    v = TV.get(f"{r.away_team}@{r.home_team}")
+    if isinstance(v, dict) and v.get("time") and 15 <= k.hour <= 23:
+        hh, mm = map(int, v["time"].split(":"))
+        if 15 <= hh <= 23 and (hh, mm) != (k.hour, k.minute):
+            print(f"  Anstoß {r.away_team}@{r.home_team}: {k:%H:%M} -> {v['time']} laut TV-Plan")
+            k = k.replace(hour=hh, minute=mm)
+    return k
+
+
+def slot(k):
+    return "Früh" if k.hour == 19 else "Spät" if k.hour == 22 else None   # nur die gleichzeitigen Sonntagsspiele
+
+
 slots = {}
 for _, r in S[(S.week == week) & S.result.isna() & (S.weekday == "Sunday")].iterrows():
-    sl = slot(int(r.gametime[:2]))
+    kick = kick_de(r)
+    sl = slot(kick)
     if not sl:
         continue
-    kick = datetime.fromisoformat(f"{r.gameday} {r.gametime}").replace(tzinfo=ET)
     match = f"{r.away_team} @ {r.home_team}"
     ph = (1 / dec(r.home_moneyline)) / (1 / dec(r.home_moneyline) + 1 / dec(r.away_moneyline))
     fav, dog, pf = (r.home_team, r.away_team, ph) if ph >= .5 else (r.away_team, r.home_team, 1 - ph)
@@ -126,16 +177,19 @@ for _, r in S[(S.week == week) & S.result.isna() & (S.weekday == "Sunday")].iter
     wx_note = ("" if not outdoor else "Achtung Freiluft: Wetter unbekannt" if not wx
                else f"Achtung Freiluft: Wind {wx[0]:.0f} km/h, Regen {wx[1]:.1f} mm" if bad_wx else "")
     pts = {r.home_team: r.total_line / 2 + r.spread_line / 2, r.away_team: r.total_line / 2 - r.spread_line / 2}
-    dl = math.floor(fs + ALT) + 0.5
     ol = math.ceil(r.total_line - ALT) - 0.5
-    tl = math.floor(pts[fav] - 6) + 0.5
+    H1 = 0.515                        # Anteil der Punkte in der 1. Halbzeit (2022–2025)
     pen = 0.02 if outdoor else 0     # Freiluft trifft bei Über-Legs etwas seltener
     # d = Definition für die gemeinsame Rechnung mehrerer Legs aus einem Spiel
     legs = [("Sieg", f"Sieg {fav}", pf, False, {"k": "win", "tm": fav}),
             ("SiegD", f"Sieg {dog}", 1 - pf, False, {"k": "win", "tm": dog}),
-            ("HC", f"{dog} +{dl:g} Handicap", Phi((dl - fs) / 12.6), False, {"k": "hc", "tm": dog, "ln": dl}),
-            ("OU", f"Über {ol:g} Punkte", Phi((r.total_line - ol) / 13) - pen, True, {"k": "ou", "ln": ol}),
-            ("TT", f"{fav} über {tl:g} Punkte", Phi((pts[fav] - tl) / 9.1) - pen, True, {"k": "tt", "tm": fav, "ln": tl})]
+            # mu/sd/pen erlauben in der App, die Linie an das bwin-Angebot anzupassen
+            ("OU", f"Über {ol:g} Punkte", Phi((r.total_line - ol) / 13) - pen, True,
+             {"k": "ou", "ln": ol, "mu": float(r.total_line), "sd": 13, "pen": pen, "tpl": "Über {ln} Punkte"})]
+    for tm in (fav, dog):             # 1. Halbzeit Team über X Punkte, Linie ca. 4 Punkte unter Erwartung
+        mu1 = H1 * pts[tm]; l1 = math.floor(mu1 - 4) + 0.5
+        legs.append((f"H1{tm}", f"{tm} 1. HZ über {l1:g} Punkte", Phi((mu1 - l1) / 7.2) - pen, True,
+                     {"k": "h1", "tm": tm, "ln": l1, "mu": round(mu1, 2), "sd": 7.2, "pen": pen, "tpl": tm + " 1. HZ über {ln} Punkte"}))
     gm = {"h": r.home_team, "a": r.away_team, "m": float(r.spread_line), "t": float(r.total_line)}
     pl = {}   # pid -> [lam, name, team, pos, info]
     for pid, h in P[P.player_id.isin([k for k, v in team_now.items() if v in pts])].groupby("player_id"):
@@ -163,6 +217,7 @@ for _, r in S[(S.week == week) & S.result.isna() & (S.weekday == "Sunday")].iter
         cand.append((1 - math.exp(-lam), f"TD {nm} ({tm}){q}", {"k": "td", "tm": tm, "lam": round(lam, 4)}, info))
     legs += [(f"TD{i}", lab, p, False, d, info) for i, (p, lab, d, info) in enumerate(sorted(cand, key=lambda c: -c[0])[:4])]
     s = slots.setdefault(sl, {"name": sl, "kick": kick.astimezone(DE).strftime("%H:%M"), "legs": []})
+    s["kick"] = min(s["kick"], kick.astimezone(DE).strftime("%H:%M"))
     for kind, label, p, over, d, *info in legs:
         warn = [w for w in [qb_note, wx_note if over else ""] if w]
         s["legs"].append(dict(id=f"{r.game_id}:{kind}", game=r.game_id, match=match, label=label, p=round(p, 3), d=d, gm=gm, info=info[0] if info else "",
@@ -175,42 +230,10 @@ def qb_now(team, name):
     return f"{o['sub']} (für {name})" if o and o["sub"] else (name or "")
 
 
-import re
-T = nfl.load_teams().to_pandas()
-TV_URLS = ["https://ran.joyn.de/sports/american-football/nfl/nfl-live-diese-{m}-werden-in-woche{w}-kostenlos-gezeigt-uebertragungen-im-free-tv-{s}-173951"
-           .format(m=m, w=week, s=s) for m in ("matches", "spiele") for s in ("stream-ticker", "livestream-und-ticker", "stream-und-ticker")]
-
-
-def tv():
-    """TV-Sender je Spiel: erst tv.json (von Hand), sonst die Wochenübersicht von ran.de."""
-    try:
-        manual = json.load(open("tv.json", encoding="utf-8")).get(f"{SEASON}-{week}")
-        if manual:
-            print("  TV: aus tv.json"); return manual
-    except Exception:
-        pass
-    names = {n: a for a, n in zip(T.team_abbr, T.team_name)}
-    for url in TV_URLS:
-        try:
-            html = urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"}), timeout=20).read().decode("utf-8", "ignore")
-        except Exception:
-            continue
-        text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html))
-        res = {}
-        for away, home, ch in re.findall(r"Uhr: ([A-Z][\w .]+?) at ([A-Z][\w .]+?)(?: aus \w+)? \(([^)]*)\)", text):
-            a, h = names.get(away.strip()), names.get(home.strip())
-            if a and h:
-                res[f"{a}@{h}"] = "RTL" if "Free-TV/RTL" in ch else "RTL+" if "RTL+" in ch else "Sky" if "Sky" in ch else ""
-        if res:
-            print(f"  TV: {len(res)} Spiele von ran.de"); return res
-    print("  TV: keine Daten gefunden"); return {}
-
-
-TV = tv()
 DAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 games = []
 for _, r in S[S.week == week].iterrows():
-    k = datetime.fromisoformat(f"{r.gameday} {r.gametime}").replace(tzinfo=ET).astimezone(DE)
+    k = kick_de(r)
     if r.location == "Neutral" and r.stadium in NEUTRAL:
         w = weather(r.home_team, k.astimezone(UTC), NEUTRAL[r.stadium]); roof = "outdoors"
     else:
@@ -218,17 +241,25 @@ for _, r in S[S.week == week].iterrows():
         w = weather(r.home_team, k.astimezone(UTC)) if roof in ("outdoors", "open") else None
     wx = ({"roof": "Halle"} if roof in ("dome", "closed") else {"roof": "Dach"} if roof == "dach"
           else {"w": round(w[0]), "r": round(w[1], 1), "t": None if w[2] is None else round(w[2]), "c": w[3], "d": w[4]} if w else {"roof": "?"})
-    games.append(dict(t=k.isoformat(), wx=wx, tv=TV.get(f"{r.away_team}@{r.home_team}", ""), day=f"{DAYS[k.weekday()]} {k:%d.%m.}", kick=f"{k:%H:%M}", away=r.away_team, home=r.home_team,
+    games.append(dict(t=k.isoformat(), wx=wx, tv=tv_ch(r.away_team, r.home_team), day=f"{DAYS[k.weekday()]} {k:%d.%m.}", kick=f"{k:%H:%M}", away=r.away_team, home=r.home_team,
                       score=None if r.result != r.result else f"{int(r.away_score)}:{int(r.home_score)}",
                       qbs=[qb_now(r.away_team, r.away_qb_name), qb_now(r.home_team, r.home_qb_name)],
                       outs=OUTS[r.away_team] + OUTS[r.home_team]))
 games.sort(key=lambda g: g["t"])
 colors = {a: [c1, c2, nk] for a, c1, c2, nk in zip(T.team_abbr, T.team_color, T.team_color2, T.team_nick)}
 DIV = dict(zip(T.team_abbr, T.team_division))
-teams = [dict(t=t, div=DIV.get(t, ""), bye=t not in set(S[S.week == week].home_team) | set(S[S.week == week].away_team),
+DEPTH_SHOW = {"QB": 3, "RB": 3, "WR": 5, "TE": 3}
+depth = lambda t: {pos: [[n, status.get(pid) if isinstance(status.get(pid), str) else ""] for pid, n in DEPTH.get((t, pos), [])[:k]] for pos, k in DEPTH_SHOW.items()}
+teams = [dict(t=t, div=DIV.get(t, ""), depth=depth(t), bye=t not in set(S[S.week == week].home_team) | set(S[S.week == week].away_team),
               outs=[{k: v for k, v in o.items() if k != "pid"} for o in OUTS[t]]) for t in TEAMS]
 for g in games:
     g["outs"] = [{k: v for k, v in o.items() if k != "pid"} for o in g["outs"]]
 out = {"teams": teams, "games": games, "colors": colors, "week": week, "updated": TODAY.strftime("%d.%m. %H:%M"), "slots": [slots[k] for k in ("Früh", "Spät") if k in slots]}
-json.dump(out, open("data.json", "w"), ensure_ascii=False)
+def nonan(x):   # NaN ist in JSON ungültig und würde die App blockieren
+    if isinstance(x, float) and x != x:
+        return None
+    return {k: nonan(v) for k, v in x.items()} if isinstance(x, dict) else [nonan(v) for v in x] if isinstance(x, list) else x
+
+
+json.dump(nonan(out), open("data.json", "w"), ensure_ascii=False)
 print(f"Week {week}: {sum(len(s['legs']) for s in out['slots'])} Legs geschrieben")

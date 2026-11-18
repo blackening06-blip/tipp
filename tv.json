@@ -1,5 +1,27 @@
 {
-  "_info": "TV-Sender je Spiel, falls die automatische Suche nichts findet. Schlüssel: Saison-Woche, Spiel als AUSWÄRTS@HEIM, Sender RTL, RTL+ oder Sky.",
-  "2026-10": {"WAS@NYG": "RTL", "NE@DET": "RTL", "KC@ATL": "RTL", "BUF@NYJ": "RTL+", "MIN@GB": "Sky",
-              "SF@DAL": "RTL", "SEA@LV": "Sky", "PIT@CIN": "RTL", "LAC@BAL": "RTL"}
+ "_info": "TV-Sender je Spiel, falls die automatische Suche nichts findet. Schlüssel: Saison-Woche, Spiel als AUSWÄRTS@HEIM. Wert: Sender (RTL, RTL+, Sky) oder {\"ch\": Sender, \"time\": \"22:25\"}, wenn die NFL die Anstoßzeit verlegt hat.",
+ "2026-10": {
+  "WAS@NYG": "RTL",
+  "NE@DET": "RTL",
+  "KC@ATL": "RTL",
+  "BUF@NYJ": "RTL+",
+  "MIN@GB": "Sky",
+  "SF@DAL": "RTL",
+  "SEA@LV": "Sky",
+  "PIT@CIN": "RTL",
+  "LAC@BAL": "RTL"
+ },
+ "2026-11": {
+  "IND@HOU": "RTL",
+  "MIA@BUF": "Sky",
+  "TB@DET": "RTL",
+  "ARI@KC": "RTL+",
+  "JAX@NYG": {
+   "ch": "RTL",
+   "time": "22:25"
+  },
+  "LV@DEN": "Sky",
+  "MIN@SF": "RTL",
+  "CIN@WAS": "RTL"
+ }
 }
